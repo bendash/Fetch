@@ -227,7 +227,9 @@ class Message
 
             return false;
 
-        $this->subject = isset($messageOverview->subject) ? imap_utf8($messageOverview->subject) : null;
+        if(isset($messageOverview->subject)) {
+			$this->subject = function_exists('iconv_mime_decode') ? iconv_mime_decode($messageOverview->subject) : imap_utf8($messageOverview->subject);
+		}
         $this->date    = strtotime($messageOverview->date);
         $this->size    = $messageOverview->size;
 
@@ -321,6 +323,32 @@ class Message
 
         return $this->headers;
     }
+	
+	/**
+	* This function returns an object containing the additional headers of the message.
+	*
+	* @return \stdClass
+	*/
+   public function getAdditionalHeaders() {
+
+		   $additionalHeaders = array();
+
+		   $rawHeaders = imap_fetchheader($this->imapStream, $this->uid, FT_UID);
+		   $headers = explode(PHP_EOL, $rawHeaders);
+
+		   if (is_array($headers) && count($headers)) {
+				   foreach($headers as $line) {
+						   // is line with additional header?
+						   if (preg_match("/^X-/i", $line)) {
+								   // separate name and value
+								   preg_match("/^([^:]*): (.*)/i", $line, $arg);
+								   $additionalHeaders[$arg[1]] = $arg[2];
+						   }
+				   }
+		   }
+
+		   return $additionalHeaders;
+   }
 
     /**
      * This function returns an object containing the structure of the message body. This is the same object thats
@@ -496,7 +524,7 @@ class Message
                 }
             }
 
-            if (strtolower($structure->subtype) === 'plain' || ($structure->type == 1 && strtolower($structure->subtype) !== 'alternative')) {
+            if (strtolower($structure->subtype) === 'plain') {
                 if (isset($this->plaintextMessage)) {
                     $this->plaintextMessage .= PHP_EOL . PHP_EOL;
                 } else {
